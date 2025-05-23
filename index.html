@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Paradelle Generator</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 800px;
+      margin: 2rem auto;
+      padding: 1rem;
+    }
+    input {
+      display: block;
+      width: 100%;
+      margin-bottom: 0.5rem;
+      padding: 0.5rem;
+    }
+    button {
+      margin: 0.25rem;
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
+    }
+    .word {
+      display: inline-block;
+      margin: 2px;
+      padding: 4px 6px;
+      background: #f0f0f0;
+      border: 1px solid #ccc;
+      cursor: move;
+    }
+    .line {
+      margin-bottom: 0.5rem;
+    }
+    .poem {
+      background: #f9f9f9;
+      padding: 1rem;
+      border: 1px solid #ccc;
+      margin-top: 1rem;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>Paradelle Generator</h1>
+  <div id="input-section"></div>
+  <div id="output-section" style="display:none;"></div>
+
+  <script>
+    const inputSection = document.getElementById("input-section");
+    const outputSection = document.getElementById("output-section");
+    let inputLines = Array(6).fill("");
+    let interactiveLines = {};
+    let showPlainText = false;
+
+    const extractWords = (text) => text.match(/[A-Za-z0-9'-]+/g) || [];
+
+    const shuffle = (arr) => {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    };
+
+    const scramblePair = (text) => {
+      const words = extractWords(text);
+      shuffle(words);
+      const mid = Math.ceil(words.length / 2);
+      return [words.slice(0, mid), words.slice(mid)];
+    };
+
+    const scrambleSix = (text) => {
+      const words = extractWords(text);
+      shuffle(words);
+      const chunk = Math.ceil(words.length / 6);
+      return Array.from({ length: 6 }, (_, i) => words.slice(i * chunk, (i + 1) * chunk));
+    };
+
+    const generateInputs = () => {
+      inputSection.innerHTML = "";
+      inputLines.forEach((line, i) => {
+        const input = document.createElement("input");
+        input.placeholder = `Enter line ${i + 1}`;
+        input.value = line;
+        input.oninput = (e) => (inputLines[i] = e.target.value);
+        inputSection.appendChild(input);
+      });
+
+      const btn = document.createElement("button");
+      btn.textContent = "Generate Paradelle";
+      btn.onclick = handleGenerate;
+      inputSection.appendChild(btn);
+    };
+
+    const handleGenerate = () => {
+      if (inputLines.some((line) => line.trim() === "")) {
+        alert("Please fill in all six lines.");
+        return;
+      }
+
+      const [l1, l2, l3, l4, l5, l6] = inputLines;
+      const [s1l5, s1l6] = scramblePair(`${l1} ${l2}`);
+      const [s2l5, s2l6] = scramblePair(`${l3} ${l4}`);
+      const [s3l5, s3l6] = scramblePair(`${l5} ${l6}`);
+      const finalSix = scrambleSix(inputLines.join(" "));
+
+      interactiveLines = {
+        s1l5, s1l6,
+        s2l5, s2l6,
+        s3l5, s3l6,
+        ...Object.fromEntries(finalSix.map((arr, i) => [`f${i}`, arr]))
+      };
+
+      showPlainText = false;
+      renderPoem();
+    };
+
+    const renderLine = (line) => {
+      const div = document.createElement("div");
+      div.className = "line";
+      div.textContent = line;
+      return div;
+    };
+
+    const renderInteractiveLine = (key) => {
+      const lineDiv = document.createElement("div");
+      lineDiv.className = "line";
+      interactiveLines[key].forEach((word, idx) => {
+        const span = document.createElement("span");
+        span.className = "word";
+        span.draggable = true;
+        span.textContent = word;
+
+        span.ondragstart = (e) => {
+          e.dataTransfer.setData("fromKey", key);
+          e.dataTransfer.setData("fromIdx", idx);
+        };
+
+        span.ondrop = (e) => {
+          e.preventDefault();
+          const fromKey = e.dataTransfer.getData("fromKey");
+          const fromIdx = +e.dataTransfer.getData("fromIdx");
+          if (!(fromKey in interactiveLines)) return;
+
+          const word = interactiveLines[fromKey].splice(fromIdx, 1)[0];
+          interactiveLines[key].splice(idx, 0, word);
+          renderPoem();
+        };
+
+        span.ondragover = (e) => e.preventDefault();
+        lineDiv.appendChild(span);
+      });
+      return lineDiv;
+    };
+
+    const renderTextLine = (key) => {
+      const div = document.createElement("div");
+      div.className = "line";
+      div.textContent = interactiveLines[key].join(" ");
+      return div;
+    };
+
+    const renderPoem = () => {
+      inputSection.style.display = "none";
+      outputSection.style.display = "block";
+      outputSection.innerHTML = "";
+
+      const btnBack = document.createElement("button");
+      btnBack.textContent = "Edit Input";
+      btnBack.onclick = () => {
+        outputSection.style.display = "none";
+        inputSection.style.display = "block";
+      };
+      outputSection.appendChild(btnBack);
+
+      const btnReshuffle = document.createElement("button");
+      btnReshuffle.textContent = "Reshuffle Final Stanza";
+      btnReshuffle.onclick = () => {
+        const reshuffled = scrambleSix(inputLines.join(" "));
+        reshuffled.forEach((arr, i) => (interactiveLines[`f${i}`] = arr));
+        renderPoem();
+      };
+      outputSection.appendChild(btnReshuffle);
+
+      const btnToggle = document.createElement("button");
+      btnToggle.textContent = showPlainText ? "Return to interactive" : "View as plain text";
+      btnToggle.onclick = () => {
+        showPlainText = !showPlainText;
+        renderPoem();
+      };
+      outputSection.appendChild(btnToggle);
+
+      const poemDiv = document.createElement("div");
+      poemDiv.className = "poem";
+
+      const [l1, l2, l3, l4, l5, l6] = inputLines;
+
+      [l1, l1, l2, l2].forEach(line => poemDiv.appendChild(renderLine(line)));
+      poemDiv.appendChild(showPlainText ? renderTextLine("s1l5") : renderInteractiveLine("s1l5"));
+      poemDiv.appendChild(showPlainText ? renderTextLine("s1l6") : renderInteractiveLine("s1l6"));
+      poemDiv.appendChild(document.createElement("br"));
+
+      [l3, l3, l4, l4].forEach(line => poemDiv.appendChild(renderLine(line)));
+      poemDiv.appendChild(showPlainText ? renderTextLine("s2l5") : renderInteractiveLine("s2l5"));
+      poemDiv.appendChild(showPlainText ? renderTextLine("s2l6") : renderInteractiveLine("s2l6"));
+      poemDiv.appendChild(document.createElement("br"));
+
+      [l5, l5, l6, l6].forEach(line => poemDiv.appendChild(renderLine(line)));
+      poemDiv.appendChild(showPlainText ? renderTextLine("s3l5") : renderInteractiveLine("s3l5"));
+      poemDiv.appendChild(showPlainText ? renderTextLine("s3l6") : renderInteractiveLine("s3l6"));
+      poemDiv.appendChild(document.createElement("br"));
+
+      for (let i = 0; i < 6; i++) {
+        poemDiv.appendChild(showPlainText ? renderTextLine(`f${i}`) : renderInteractiveLine(`f${i}`));
+      }
+
+      outputSection.appendChild(poemDiv);
+    };
+
+    generateInputs();
+  </script>
+</body>
+</html>
