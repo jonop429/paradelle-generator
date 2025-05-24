@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Paradelle Generator</title>
   <style>
     body {
@@ -18,9 +18,16 @@
       padding: 0.5rem;
     }
     button {
-      margin: 0.25rem;
+      margin-left: 0rem;
+      margin-right: 0.25rem;
+      margin-top: 0.25rem;
       padding: 0.5rem 1rem;
       font-size: 1rem;
+      background-color: #222;
+      color:#fff;
+      border: 0;
+      border-radius: 5px;
+      cursor: pointer;
     }
     .word {
       display: inline-block;
@@ -29,6 +36,7 @@
       background: #f0f0f0;
       border: 1px solid #ccc;
       cursor: move;
+      user-select: none;
     }
     .line {
       margin-bottom: 0.5rem;
@@ -39,44 +47,131 @@
       border: 1px solid #ccc;
       margin-top: 1rem;
       white-space: pre-wrap;
+      min-height: 300px;
+    }
+    .info-container {
+      position: relative;
+      display: inline-block;
+      cursor: pointer;
+      margin-left: 0.5rem;
+      color: #555;
+      font-size: 18px;
+      vertical-align: middle;
+    }
+    .tooltip {
+      visibility: hidden;
+      opacity: 0;
+      width: 220px;
+      background-color: #333;
+      color: #fff;
+      text-align: left;
+      border-radius: 5px;
+      padding: 0.5rem;
+      position: absolute;
+      top: 1.5rem;
+      left: 0;
+      z-index: 10;
+      transition: opacity 0.3s;
+      font-size: 0.9rem;
+    }
+    .info-container:hover .tooltip {
+      visibility: visible;
+      opacity: 1;
+    }
+    .controls {
+      margin-top: 1rem;
+    }
+    .controls button {
+      margin-right: 0.5rem;
+    }
+    .credits {
+      margin-top: 2rem;
+      font-size: 0.85rem;
+      color: #666;
+      border-top: 1px solid #ccc;
+      padding-top: 1rem;
+      text-align: center;
+    }
+    .credits a {
+      color: #666;
+    }
+    .credits a:hover {
+      text-decoration: underline;
     }
   </style>
 </head>
 <body>
-  <h1>Paradelle Generator</h1>
+  <h1>
+    Paradelle Generator
+    <span class="info-container">
+      ⓘ
+      <div class="tooltip">
+        A paradelle is a poetic form involving repetition and rearrangement. Billy Collins invented it in "Paradelle for Susan" for his 1998 book, "Picnic, Lightning," but claimed that it was an 11th century French form. The prank successfully prompted a paradelle revival before Collins admitted in 2002 that he made it up.
+      </div>
+    </span>
+  </h1>
+
   <div id="input-section"></div>
-  <div id="output-section" style="display:none;"></div>
+
+  <div id="output-section" style="display:none;">
+    <div class="poem" id="poem"></div>
+    <div class="controls">
+      <button id="backBtn">Back to form</button>
+      <button id="shuffleBtn">Shuffle</button>
+      <button id="togglePlainBtn">View as Plain Text</button>
+    </div>
+  </div>
+
+  <div class="credits">
+    Built by <a href="https://chat.openai.com">ChatGPT</a> and a human collaborator<br>
+    Read <a href="https://www.poetryfoundation.org/poems/51860/paradelle-for-susan">"Paradelle for Susan"</a>
+  </div>
 
   <script>
     const inputSection = document.getElementById("input-section");
     const outputSection = document.getElementById("output-section");
+    const poemDiv = document.getElementById("poem");
+    const backBtn = document.getElementById("backBtn");
+    const shuffleBtn = document.getElementById("shuffleBtn");
+    const togglePlainBtn = document.getElementById("togglePlainBtn");
+
     let inputLines = Array(6).fill("");
     let interactiveLines = {};
+    let isReverseMode = false;
     let showPlainText = false;
 
+    // Utility to split words (letters, numbers, apostrophes, hyphens)
     const extractWords = (text) => text.match(/[A-Za-z0-9'-]+/g) || [];
 
-    const shuffle = (arr) => {
+    // Fisher-Yates shuffle
+    const shuffleArray = (arr) => {
       for (let i = arr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [arr[i], arr[j]] = [arr[j], arr[i]];
       }
     };
 
-    const scramblePair = (text) => {
-      const words = extractWords(text);
-      shuffle(words);
-      const mid = Math.ceil(words.length / 2);
-      return [words.slice(0, mid), words.slice(mid)];
-    };
-
+    // Scramble all words into 6 lines (for stanza 4)
     const scrambleSix = (text) => {
       const words = extractWords(text);
-      shuffle(words);
-      const chunk = Math.ceil(words.length / 6);
-      return Array.from({ length: 6 }, (_, i) => words.slice(i * chunk, (i + 1) * chunk));
+      shuffleArray(words);
+
+    const result = [];
+      let start = 0;
+      const baseSize = Math.floor(words.length / 6);
+      let remainder = words.length % 6;
+
+      for (let i = 0; i < 6; i++) {
+        let size = baseSize + (remainder > 0 ? 1 : 0);
+        remainder--;
+        result.push(words.slice(start, start + size));
+        start += size;
+      }
+
+      return result;
     };
 
+    // Generate input fields and generate buttons
     const generateInputs = () => {
       inputSection.innerHTML = "";
       inputLines.forEach((line, i) => {
@@ -89,33 +184,16 @@
 
       const btn = document.createElement("button");
       btn.textContent = "Generate Paradelle";
-      btn.onclick = handleGenerate;
+      btn.onclick = () => handleGenerate(false);
       inputSection.appendChild(btn);
+
+      const btnReverse = document.createElement("button");
+      btnReverse.textContent = "Generate in Reverse";
+      btnReverse.onclick = () => handleGenerate(true);
+      inputSection.appendChild(btnReverse);
     };
 
-    const handleGenerate = () => {
-      if (inputLines.some((line) => line.trim() === "")) {
-        alert("Please fill in all six lines.");
-        return;
-      }
-
-      const [l1, l2, l3, l4, l5, l6] = inputLines;
-      const [s1l5, s1l6] = scramblePair(`${l1} ${l2}`);
-      const [s2l5, s2l6] = scramblePair(`${l3} ${l4}`);
-      const [s3l5, s3l6] = scramblePair(`${l5} ${l6}`);
-      const finalSix = scrambleSix(inputLines.join(" "));
-
-      interactiveLines = {
-        s1l5, s1l6,
-        s2l5, s2l6,
-        s3l5, s3l6,
-        ...Object.fromEntries(finalSix.map((arr, i) => [`f${i}`, arr]))
-      };
-
-      showPlainText = false;
-      renderPoem();
-    };
-
+    // Render a plain text line (not interactive)
     const renderLine = (line) => {
       const div = document.createElement("div");
       div.className = "line";
@@ -123,6 +201,7 @@
       return div;
     };
 
+    // Render an interactive draggable line for a key in interactiveLines
     const renderInteractiveLine = (key) => {
       const lineDiv = document.createElement("div");
       lineDiv.className = "line";
@@ -143,8 +222,13 @@
           const fromIdx = +e.dataTransfer.getData("fromIdx");
           if (!(fromKey in interactiveLines)) return;
 
+          // Move the dragged word
           const word = interactiveLines[fromKey].splice(fromIdx, 1)[0];
           interactiveLines[key].splice(idx, 0, word);
+
+          // In reverse mode, update mirrored lines if needed
+          if (isReverseMode) updateMirroredLines();
+
           renderPoem();
         };
 
@@ -154,68 +238,207 @@
       return lineDiv;
     };
 
-    const renderTextLine = (key) => {
-      const div = document.createElement("div");
-      div.className = "line";
-      div.textContent = interactiveLines[key].join(" ");
-      return div;
+    // Update mirrored lines (lines 2 and 4 mirror 1 and 3 in reverse mode)
+    const updateMirroredLines = () => {
+      // stanza 1
+      interactiveLines["s1l2"] = [...interactiveLines["s1l1"]];
+      interactiveLines["s1l4"] = [...interactiveLines["s1l3"]];
+      // stanza 2
+      interactiveLines["s2l2"] = [...interactiveLines["s2l1"]];
+      interactiveLines["s2l4"] = [...interactiveLines["s2l3"]];
+      // stanza 3
+      interactiveLines["s3l2"] = [...interactiveLines["s3l1"]];
+      interactiveLines["s3l4"] = [...interactiveLines["s3l3"]];
     };
 
-    const renderPoem = () => {
+    // Handle poem generation (standard or reverse)
+    const handleGenerate = (reverse) => {
+      isReverseMode = reverse;
+      showPlainText = false;
+      prepareInteractiveLines(isReverseMode);
       inputSection.style.display = "none";
       outputSection.style.display = "block";
-      outputSection.innerHTML = "";
+      togglePlainBtn.textContent = "View as Plain Text";
+      renderPoem();
+    };
 
-      const btnBack = document.createElement("button");
-      btnBack.textContent = "Edit Input";
-      btnBack.onclick = () => {
-        outputSection.style.display = "none";
-        inputSection.style.display = "block";
-      };
-      outputSection.appendChild(btnBack);
-
-      const btnReshuffle = document.createElement("button");
-      btnReshuffle.textContent = "Reshuffle Final Stanza";
-      btnReshuffle.onclick = () => {
-        const reshuffled = scrambleSix(inputLines.join(" "));
-        reshuffled.forEach((arr, i) => (interactiveLines[`f${i}`] = arr));
-        renderPoem();
-      };
-      outputSection.appendChild(btnReshuffle);
-
-      const btnToggle = document.createElement("button");
-      btnToggle.textContent = showPlainText ? "Return to interactive" : "View as plain text";
-      btnToggle.onclick = () => {
-        showPlainText = !showPlainText;
-        renderPoem();
-      };
-      outputSection.appendChild(btnToggle);
-
-      const poemDiv = document.createElement("div");
-      poemDiv.className = "poem";
-
+    // Prepare interactiveLines for the poem based on mode
+    const prepareInteractiveLines = (isReverseMode) => {
       const [l1, l2, l3, l4, l5, l6] = inputLines;
 
-      [l1, l1, l2, l2].forEach(line => poemDiv.appendChild(renderLine(line)));
-      poemDiv.appendChild(showPlainText ? renderTextLine("s1l5") : renderInteractiveLine("s1l5"));
-      poemDiv.appendChild(showPlainText ? renderTextLine("s1l6") : renderInteractiveLine("s1l6"));
-      poemDiv.appendChild(document.createElement("br"));
+      interactiveLines = {};
 
-      [l3, l3, l4, l4].forEach(line => poemDiv.appendChild(renderLine(line)));
-      poemDiv.appendChild(showPlainText ? renderTextLine("s2l5") : renderInteractiveLine("s2l5"));
-      poemDiv.appendChild(showPlainText ? renderTextLine("s2l6") : renderInteractiveLine("s2l6"));
-      poemDiv.appendChild(document.createElement("br"));
+      if (!isReverseMode) {
+        // Standard mode
+        // Stanza 1 lines 1-4: inputs 1 & 2 repeated (plain)
+        interactiveLines["s1l1"] = extractWords(l1);
+        interactiveLines["s1l2"] = extractWords(l2);
+        interactiveLines["s1l3"] = extractWords(l1);
+        interactiveLines["s1l4"] = extractWords(l2);
+        // lines 5 & 6 shuffled interactive from l1 and l2 separately
+        interactiveLines["s1l5"] = extractWords(l1);
+        shuffleArray(interactiveLines["s1l5"]);
+        interactiveLines["s1l6"] = extractWords(l2);
+        shuffleArray(interactiveLines["s1l6"]);
 
-      [l5, l5, l6, l6].forEach(line => poemDiv.appendChild(renderLine(line)));
-      poemDiv.appendChild(showPlainText ? renderTextLine("s3l5") : renderInteractiveLine("s3l5"));
-      poemDiv.appendChild(showPlainText ? renderTextLine("s3l6") : renderInteractiveLine("s3l6"));
-      poemDiv.appendChild(document.createElement("br"));
+        // Stanza 2 lines 1-4 inputs 3 & 4 repeated (plain)
+        interactiveLines["s2l1"] = extractWords(l3);
+        interactiveLines["s2l2"] = extractWords(l4);
+        interactiveLines["s2l3"] = extractWords(l3);
+        interactiveLines["s2l4"] = extractWords(l4);
+        // lines 5 & 6 shuffled interactive
+        interactiveLines["s2l5"] = extractWords(l3);
+        shuffleArray(interactiveLines["s2l5"]);
+        interactiveLines["s2l6"] = extractWords(l4);
+        shuffleArray(interactiveLines["s2l6"]);
 
-      for (let i = 0; i < 6; i++) {
-        poemDiv.appendChild(showPlainText ? renderTextLine(`f${i}`) : renderInteractiveLine(`f${i}`));
+        // Stanza 3 lines 1-4 inputs 5 & 6 repeated (plain)
+        interactiveLines["s3l1"] = extractWords(l5);
+        interactiveLines["s3l2"] = extractWords(l6);
+        interactiveLines["s3l3"] = extractWords(l5);
+        interactiveLines["s3l4"] = extractWords(l6);
+        // lines 5 & 6 shuffled interactive
+        interactiveLines["s3l5"] = extractWords(l5);
+        shuffleArray(interactiveLines["s3l5"]);
+        interactiveLines["s3l6"] = extractWords(l6);
+        shuffleArray(interactiveLines["s3l6"]);
+
+      } else {
+        // Reverse mode
+        // For each stanza 1-3:
+        // Lines 1 & 3 interactive from all words in that stanza's two input lines shuffled and split
+        // Lines 2 & 4 mirrors of 1 & 3 (plain)
+        // Lines 5 & 6 original inputs (plain)
+
+        // Stanza 1
+        const s1words = extractWords(`${l1} ${l2}`);
+        shuffleArray(s1words);
+        const mid1 = Math.ceil(s1words.length / 2);
+        interactiveLines["s1l1"] = s1words.slice(0, mid1);
+        interactiveLines["s1l3"] = s1words.slice(mid1);
+        interactiveLines["s1l5"] = extractWords(l1);
+        interactiveLines["s1l6"] = extractWords(l2);
+
+        // Stanza 2
+        const s2words = extractWords(`${l3} ${l4}`);
+        shuffleArray(s2words);
+        const mid2 = Math.ceil(s2words.length / 2);
+        interactiveLines["s2l1"] = s2words.slice(0, mid2);
+        interactiveLines["s2l3"] = s2words.slice(mid2);
+        interactiveLines["s2l5"] = extractWords(l3);
+        interactiveLines["s2l6"] = extractWords(l4);
+
+        // Stanza 3
+        const s3words = extractWords(`${l5} ${l6}`);
+        shuffleArray(s3words);
+        const mid3 = Math.ceil(s3words.length / 2);
+        interactiveLines["s3l1"] = s3words.slice(0, mid3);
+        interactiveLines["s3l3"] = s3words.slice(mid3);
+        interactiveLines["s3l5"] = extractWords(l5);
+        interactiveLines["s3l6"] = extractWords(l6);
+
+        updateMirroredLines();
       }
 
-      outputSection.appendChild(poemDiv);
+      // Stanza 4 (final stanza) - always 6 interactive lines from all words
+      const allWords = inputLines.join(" ");
+      const scrambledSixLines = scrambleSix(allWords);
+      scrambledSixLines.forEach((arr, i) => (interactiveLines[`f${i}`] = arr));
+    };
+
+    // Render the poem in the outputSection (interactive or plain text)
+    const renderPoem = () => {
+      poemDiv.innerHTML = "";
+
+      const stanzaCount = 3;
+
+      // For stanzas 1-3: 6 lines each with line breaks between stanzas
+      for (let stanza = 1; stanza <= stanzaCount; stanza++) {
+        for (let lineNum = 1; lineNum <= 6; lineNum++) {
+          const key = `s${stanza}l${lineNum}`;
+          if (!interactiveLines[key]) continue;
+
+          if (showPlainText) {
+            poemDiv.appendChild(renderLine(interactiveLines[key].join(" ")));
+          } else {
+            if (isReverseMode) {
+              // Reverse: lines 1 & 3 interactive; lines 2 & 4 plain; 5 & 6 plain inputs
+              if ([1, 3].includes(lineNum)) {
+                poemDiv.appendChild(renderInteractiveLine(key));
+              } else {
+                poemDiv.appendChild(renderLine(interactiveLines[key].join(" ")));
+              }
+            } else {
+              // Standard: lines 5 & 6 interactive; lines 1-4 plain
+              if ([5, 6].includes(lineNum)) {
+                poemDiv.appendChild(renderInteractiveLine(key));
+              } else {
+                poemDiv.appendChild(renderLine(interactiveLines[key].join(" ")));
+              }
+            }
+          }
+        }
+        // Add blank line between stanzas except after last stanza
+        if (stanza < stanzaCount) {
+          poemDiv.appendChild(document.createElement("br"));
+        }
+      }
+
+      // Add blank line before final stanza
+      poemDiv.appendChild(document.createElement("br"));
+
+      // Stanza 4 - 6 interactive lines
+      for (let i = 0; i < 6; i++) {
+        const key = `f${i}`;
+        if (!interactiveLines[key]) continue;
+        if (showPlainText) {
+          poemDiv.appendChild(renderLine(interactiveLines[key].join(" ")));
+        } else {
+          poemDiv.appendChild(renderInteractiveLine(key));
+        }
+      }
+    };
+
+    // Shuffle interactive lines (only those interactive lines)
+    const shuffleInteractive = () => {
+      if (!interactiveLines) return;
+
+      if (isReverseMode) {
+        // In reverse mode interactive lines are s1l1, s1l3, s2l1, s2l3, s3l1, s3l3 + f0..f5
+        ["s1l1","s1l3","s2l1","s2l3","s3l1","s3l3"].forEach(k => {
+          if (interactiveLines[k]) shuffleArray(interactiveLines[k]);
+        });
+      } else {
+        // Standard mode interactive lines s1l5,s1l6,s2l5,s2l6,s3l5,s3l6 + f0..f5
+        ["s1l5","s1l6","s2l5","s2l6","s3l5","s3l6"].forEach(k => {
+          if (interactiveLines[k]) shuffleArray(interactiveLines[k]);
+        });
+      }
+      // Shuffle final stanza always
+      for(let i=0; i<6; i++){
+        if(interactiveLines[`f${i}`]) shuffleArray(interactiveLines[`f${i}`]);
+      }
+
+      if (isReverseMode) updateMirroredLines();
+
+      renderPoem();
+    };
+
+    // Button event listeners
+    backBtn.onclick = () => {
+      outputSection.style.display = "none";
+      inputSection.style.display = "block";
+      showPlainText = false;
+    };
+
+    shuffleBtn.onclick = () => {
+      shuffleInteractive();
+    };
+
+    togglePlainBtn.onclick = () => {
+      showPlainText = !showPlainText;
+      togglePlainBtn.textContent = showPlainText ? "View as Interactive" : "View as Plain Text";
+      renderPoem();
     };
 
     generateInputs();
